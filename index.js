@@ -30,7 +30,15 @@ class CubeSatDB {
   }
 
   constructor (name, options = {}) {
-    assert(name, 'CubeSatDB requires ')
+    assert(name, 'CubeSatDB requires a name or an address')
+    if (name instanceof Object) {
+      this._hash = name.hash
+      this._name = name.name
+    } else if ((typeof name) === 'string') {
+      this._name = name
+    } else {
+      throw new CubeError(`Unrecognized type of name: ${typeof name} ${JSON.stringify(name)}`)
+    }
     this._options = {
       ipfs: options.ipfs || {},
       pouch: options.pouch || {},
@@ -46,16 +54,15 @@ class CubeSatDB {
     } else {
       this._ipfs = new this._options.IPFS()
     }
-    this._name = name
-    this._log = new this._options.IpfsLog(this.ipfs, name)
-    this._pouch = new this._options.PouchDB(name, this._options.pouch)
+    this._log = new this._options.IpfsLog(this.ipfs, this.name)
+    this._pouch = new this._options.PouchDB(this.name, this._options.pouch)
     // TODO use interpret name as hash?
   }
 
   async load () {
     if (!HASH.test(this.name)) return null
     let log = await this._options.IpfsLog.fromMultihash(this.ipfs, this.name)
-    await this.join(log)
+    return this.join(log)
   }
 
   /**
@@ -102,15 +109,14 @@ class CubeSatDB {
    */
   async put (doc) {
     if (doc instanceof Array) {
-      await doc.map((doc) => {
+      return doc.map((doc) => {
         return this.put(doc)
       })
-      return null
     }
     this.validate(doc)
     let result = await this.pouch.put(doc)
     doc._rev = result.rev
-    await this.log.append(doc)
+    return this.log.append(doc)
   }
 
   /**
@@ -120,10 +126,9 @@ class CubeSatDB {
    */
   async post (doc) {
     if (doc instanceof Array) {
-      await doc.map((doc) => {
+      return doc.map((doc) => {
         return this.post(doc)
       })
-      return null
     }
     this.validate(doc)
     // post doc
@@ -132,7 +137,7 @@ class CubeSatDB {
     doc._id = result.id
     doc._rev = result.rev
     // apply doc to log
-    await this.log.append(doc)
+    return this.log.append(doc)
   }
 
   /**
@@ -175,7 +180,7 @@ class CubeSatDB {
     // remove from local
     let result = await this.pouch.remove(_id, _rev, options)
     // add DEL op to log
-    await this.log.append({
+    return this.log.append({
       _id,
       _rev: result.rev,
       _deleted: true

@@ -152,7 +152,10 @@ describe(`${name} ${version}`, function () {
     // replicate from hash
     try {
       const hash = await this.cube.toMultihash()
-      const cube = new CubeSatDB(hash, {
+      const cube = new CubeSatDB({
+        hash,
+        name: 'test-hash'
+      }, {
         ipfs: this.cube.ipfs
       })
       await cube.load()
