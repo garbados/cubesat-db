@@ -6,7 +6,7 @@ const IpfsLog = require('ipfs-log')
 const PouchDB = require('pouchdb')
 PouchDB.plugin(require('pouchdb-find'))
 
-const OPS = { add: 'ADD', del: 'DEL' }
+const HASH = /[\w\d]{46}/
 
 class CubeError extends Error {}
 
@@ -46,9 +46,16 @@ class CubeSatDB {
     } else {
       this._ipfs = new this._options.IPFS()
     }
-    // TODO use interpret name as hash?
+    this._name = name
     this._log = new this._options.IpfsLog(this.ipfs, name)
     this._pouch = new this._options.PouchDB(name, this._options.pouch)
+    // TODO use interpret name as hash?
+  }
+
+  async load () {
+    if (!HASH.test(this.name)) return null
+    let log = await this._options.IpfsLog.fromMultihash(this.ipfs, this.name)
+    await this.join(log)
   }
 
   /**
@@ -59,6 +66,7 @@ class CubeSatDB {
    *
    * @param  {Object} doc A document.
    * @throws {CubeError}   An error about the document.
+   * @todo  expand using https://wiki.apache.org/couchdb/HTTP_Document_API#Special_Fields
    */
   validate (doc) {
     if (!(doc instanceof Object)) throw new CubeError('Document must be an object.')
@@ -73,13 +81,17 @@ class CubeSatDB {
     if (log.log) log = log.log
     await this.log.join(log)
     // apply this.log.values to this.pouch to catch up
-    for (let i = 0; i < log.length; i++) {
-      let entry = log.values[i]
-      let doc = entry.payload.doc
-      await this.pouch.bulkDocs({
-        docs: [doc],
-        new_edits: false
-      })
+    for (let i = 0; i < this.log.length; i++) {
+      let entry = this.log.values[i]
+      try {
+        await this.pouch.bulkDocs({
+          docs: [entry.payload],
+          new_edits: false
+        })
+      } catch (e) {
+        console.error(e)
+        throw e
+      }
     }
   }
 
@@ -90,17 +102,15 @@ class CubeSatDB {
    */
   async put (doc) {
     if (doc instanceof Array) {
-      // FIXME cheap bulkDocs hack whoops
-      return doc.map(async (doc) => {
-        let result = await this.put(doc)
-        return result
+      await doc.map((doc) => {
+        return this.put(doc)
       })
+      return null
     }
     this.validate(doc)
-    let op = OPS.add
     let result = await this.pouch.put(doc)
     doc._rev = result.rev
-    await this.log.append({ op, doc })
+    await this.log.append(doc)
   }
 
   /**
@@ -110,10 +120,10 @@ class CubeSatDB {
    */
   async post (doc) {
     if (doc instanceof Array) {
-      // FIXME cheap bulkDocs hack whoops
-      return doc.forEach(async (doc) => {
-        await this.post(doc)
+      await doc.map((doc) => {
+        return this.post(doc)
       })
+      return null
     }
     this.validate(doc)
     // post doc
@@ -122,8 +132,7 @@ class CubeSatDB {
     doc._id = result.id
     doc._rev = result.rev
     // apply doc to log
-    let op = OPS.add
-    await this.log.append({ op, doc })
+    await this.log.append(doc)
   }
 
   /**
@@ -167,8 +176,9 @@ class CubeSatDB {
     let result = await this.pouch.remove(_id, _rev, options)
     // add DEL op to log
     await this.log.append({
-      op: OPS.del,
-      doc: { _id, _rev: result.rev, _deleted: true }
+      _id,
+      _rev: result.rev,
+      _deleted: true
     })
   }
 
@@ -191,8 +201,17 @@ class CubeSatDB {
   }
 
   async toMultihash () {
-    let hash = await this.log.toMultihash()
-    return hash
+    this._hash = await this.log.toMultihash()
+    return this.hash
+  }
+
+  get hash () {
+    if (!this._hash) throw new CubeError('DB does not have a hash yet. Call .toMultihash() first.')
+    return this._hash
+  }
+
+  get name () {
+    return this._name
   }
 
   /**

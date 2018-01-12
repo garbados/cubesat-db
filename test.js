@@ -58,51 +58,56 @@ describe(`${name} ${version}`, function () {
   })
 
   it('should handle queries', async function () {
-    await this.cube.post([{
-      name: 'Mario',
-      team: 'Mushroom'
-    }, {
-      name: 'Luigi',
-      team: 'Mushroom'
-    }, {
-      name: 'Bowser',
-      team: 'Koopa'
-    }])
-    // try mango
-    let query1 = await this.cube.find({
-      selector: {
-        team: {
-          '$eq': 'Mushroom'
+    try {
+      await this.cube.post([{
+        name: 'Mario',
+        team: 'Mushroom'
+      }, {
+        name: 'Luigi',
+        team: 'Mushroom'
+      }, {
+        name: 'Bowser',
+        team: 'Koopa'
+      }])
+      // try mango
+      let query1 = await this.cube.find({
+        selector: {
+          team: {
+            '$eq': 'Mushroom'
+          }
+        },
+        include_docs: true
+      })
+      assert.equal(query1.length, 2)
+      query1.forEach((doc) => {
+        assert.equal(doc.team, 'Mushroom')
+      })
+      // try ad-hoc mapreduce
+      let query2 = await this.cube.query(function (doc) {
+        if (doc.team === 'Mushroom') emit(doc._id)
+      }, { include_docs: true })
+      let docs2 = query2.rows.map(function (row) {
+        return row.doc
+      })
+      assert.equal(query1.length, docs2.length)
+      // try design docs
+      await this.cube.put({
+        _id: '_design/test',
+        views: {
+          mushroom: {
+            map: function (doc) {
+              if (doc.team === 'Mushroom') emit(doc._id)
+            }.toString(),
+            reduce: '_count'
+          }
         }
-      },
-      include_docs: true
-    })
-    assert.equal(query1.length, 2)
-    query1.forEach((doc) => {
-      assert.equal(doc.team, 'Mushroom')
-    })
-    // try ad-hoc mapreduce
-    let query2 = await this.cube.query(function (doc) {
-      if (doc.team === 'Mushroom') emit(doc._id)
-    }, { include_docs: true })
-    let docs2 = query2.rows.map(function (row) {
-      return row.doc
-    })
-    assert.equal(query1.length, docs2.length)
-    // try design docs
-    await this.cube.put({
-      _id: '_design/test',
-      views: {
-        mushroom: {
-          map: function (doc) {
-            if (doc.team === 'Mushroom') emit(doc._id)
-          }.toString(),
-          reduce: '_count'
-        }
-      }
-    })
-    let query3 = await this.cube.query('test/mushroom')
-    assert.equal(query1.length, query3.rows[0].value)
+      })
+      let query3 = await this.cube.query('test/mushroom')
+      assert.equal(query1.length, query3.rows[0].value)
+    } catch (e) {
+      console.error(e)
+      throw e
+    }
   })
 
   it('should join two log stores', function () {
@@ -128,8 +133,39 @@ describe(`${name} ${version}`, function () {
         assert.notEqual(cube.log.length, this.cube.log.length)
       })
       .catch((e) => {
-        console.trace(e)
+        console.error(e)
         throw e
       })
+  })
+
+  it('should generate a multihash', async function () {
+    try {
+      const hash = this.cube.hash
+      console.log('This should not print:', hash)
+    } catch (e) {
+      assert.notEqual(e.message.indexOf('does not have a hash yet'), -1)
+      assert.equal(this.cube._hash, undefined)
+      assert(e instanceof CubeSatDB.Error)
+    }
+    // if getting the hash succeeded,
+    // this const declaration would fail
+    // replicate from hash
+    try {
+      const hash = await this.cube.toMultihash()
+      const cube = new CubeSatDB(hash, {
+        ipfs: this.cube.ipfs
+      })
+      await cube.load()
+      let result = await this.cube.all()
+      // verify via zipper
+      result.forEach(async (doc) => {
+        let other = await cube.get(doc._id)
+        assert.equal(doc._id, other._id)
+        assert.equal(doc._rev, other._rev)
+      })
+    } catch (e) {
+      console.error(e)
+      throw e
+    }
   })
 })
