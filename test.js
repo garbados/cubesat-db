@@ -6,6 +6,8 @@ const rimraf = require('rimraf')
 const {name, version} = require('./package.json')
 
 before(async function () {
+  rimraf.sync('test')
+  rimraf.sync('test-*')
   this.cube = new CubeSatDB('test')
   await new Promise((resolve, reject) => {
     this.cube.ipfs.on('error', reject)
@@ -103,13 +105,31 @@ describe(`${name} ${version}`, function () {
     assert.equal(query1.length, query3.rows[0].value)
   })
 
-  it('should join two log stores', async function () {
-    try {
-      let cube = new CubeSatDB('test-copy')
-      let result = await cube.all()
-      console.log(result)
-    } catch (e) {
-      console.log(e)
-    }
+  it('should join two log stores', function () {
+    // starting two nodes is a no-no so we pass the one
+    // we already have
+    let cube = new CubeSatDB('test-copy', {
+      ipfs: this.cube.ipfs
+    })
+    return cube.all()
+      .then((docs) => {
+        assert.equal(docs.length, 0)
+        return cube.join(this.cube)
+      })
+      .then(async () => {
+        let result = await this.cube.all()
+        // verify via zipper
+        result.forEach(async (doc) => {
+          let other = await cube.get(doc._id)
+          assert.equal(doc._id, other._id)
+          assert.equal(doc._rev, other._rev)
+        })
+        // however, their oplogs will still differ
+        assert.notEqual(cube.log.length, this.cube.log.length)
+      })
+      .catch((e) => {
+        console.trace(e)
+        throw e
+      })
   })
 })

@@ -31,21 +31,24 @@ class CubeSatDB {
 
   constructor (name, options = {}) {
     assert(name, 'CubeSatDB requires ')
-    this.IpfsFactory = options._IPFS || IPFS
-    this.PouchFactory = options._PouchDB || PouchDB
-    this.LogFactory = options._IpfsLog || IpfsLog
-    let ipfs = options.ipfs
-    let pouch = options.pouch
+    this._options = {
+      ipfs: options.ipfs || {},
+      pouch: options.pouch || {},
+      IPFS: options.IPFS || IPFS,
+      PouchDB: options.PouchDB || PouchDB,
+      IpfsLog: options.IpfsLog || IpfsLog
+    }
+    let ipfs = this._options.ipfs
     if (ipfs instanceof IPFS) {
-      this._ipfs = ipfs
+      this._ipfs = this._options.ipfs
     } else if (ipfs instanceof Object) {
-      this._ipfs = new this.IpfsFactory(ipfs)
+      this._ipfs = new this._options.IPFS(ipfs)
     } else {
-      this._ipfs = new this.IpfsFactory()
+      this._ipfs = new this._options.IPFS()
     }
     // TODO use interpret name as hash?
-    this._log = new this.LogFactory(this._ipfs, name)
-    this._pouch = new this.PouchFactory(name, pouch || {})
+    this._log = new this._options.IpfsLog(this.ipfs, name)
+    this._pouch = new this._options.PouchDB(name, this._options.pouch)
   }
 
   /**
@@ -70,15 +73,14 @@ class CubeSatDB {
     if (log.log) log = log.log
     await this.log.join(log)
     // apply this.log.values to this.pouch to catch up
-    await this.log.values.forEach(async (entry) => {
-      let op = entry.payload.op
+    for (let i = 0; i < log.length; i++) {
+      let entry = log.values[i]
       let doc = entry.payload.doc
-      if (op === OPS.add) {
-        await this.pouch.put(doc)
-      } else if (op === OPS.del) {
-        await this.pouch.remove(doc)
-      }
-    })
+      await this.pouch.bulkDocs({
+        docs: [doc],
+        new_edits: false
+      })
+    }
   }
 
   /**
@@ -89,14 +91,16 @@ class CubeSatDB {
   async put (doc) {
     if (doc instanceof Array) {
       // FIXME cheap bulkDocs hack whoops
-      return doc.forEach(async (doc) => {
-        await this.put(doc)
+      return doc.map(async (doc) => {
+        let result = await this.put(doc)
+        return result
       })
     }
     this.validate(doc)
     let op = OPS.add
+    let result = await this.pouch.put(doc)
+    doc._rev = result.rev
     await this.log.append({ op, doc })
-    await this.pouch.put(doc)
   }
 
   /**
@@ -138,10 +142,15 @@ class CubeSatDB {
   async all (options = {}) {
     // default to including docs
     options.include_docs = options.include_docs || true
-    let result = await this.pouch.allDocs(options)
-    // format output to resemble find()
-    return result.rows.map((row) => {
-      return row.doc
+    return this.pouch.allDocs(options).then(function (result) {
+      if (options.include_docs) {
+        // format output to resemble find()
+        return result.rows.map(function (row) {
+          return row.doc
+        })
+      } else {
+        return result.rows
+      }
     })
   }
 
@@ -154,13 +163,13 @@ class CubeSatDB {
   async del ({ _id, _rev }, options = {}) {
     assert(_id, 'doc requires an _id to delete it.')
     assert(_rev, 'doc requires a _rev to delete it.')
+    // remove from local
+    let result = await this.pouch.remove(_id, _rev, options)
     // add DEL op to log
     await this.log.append({
       op: OPS.del,
-      doc: { _id, _rev }
+      doc: { _id, _rev: result.rev, _deleted: true }
     })
-    // remove from local
-    await this.pouch.remove(_id, _rev, options)
   }
 
   /**
