@@ -91,17 +91,22 @@ class CubeSatDB {
   /**
    * Merges another CubeSatDB or IpfsLog into this one.
    * @param  {IpfsLog|CubeSatDB} log An instance of IpfsLog or CubeSatDB.
+   * @return {Promise} [description]
    */
   join (log) {
     if (log.log) log = log.log
     return this.log.join(log).then(() => {
-      // apply this.log.values to this.pouch to catch up
-      return this.log.values.forEach(async (entry) => {
-        await this.pouch.bulkDocs({
+      // apply log.values to this.pouch to catch up
+      let tasks = log.values.map((entry) => {
+        return this.pouch.bulkDocs({
           docs: [entry.payload],
           new_edits: false
         })
+        .catch((e) => {
+          console.log(e)
+        })
       })
+      return Promise.all(tasks)
     })
   }
 

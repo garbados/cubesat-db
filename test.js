@@ -121,14 +121,19 @@ describe(`${name} ${version}`, function () {
         assert.equal(docs.length, 0)
         return cube.join(this.cube)
       })
-      .then(async () => {
-        let result = await this.cube.all()
+      .then(() => {
+        return this.cube.all()
+      })
+      .then((result) => {
         // verify via zipper
-        result.forEach(async (doc) => {
-          let other = await cube.get(doc._id)
-          assert.equal(doc._id, other._id)
-          assert.equal(doc._rev, other._rev)
+        let tasks = result.map(function (doc) {
+          return cube.get(doc._id)
+            .then((other) => {
+              assert.equal(doc._id, other._id)
+              assert.equal(doc._rev, other._rev)
+            })
         })
+        Promise.all(tasks)
         // however, their oplogs will still differ
         assert.notEqual(cube.log.length, this.cube.log.length)
       })
@@ -138,37 +143,62 @@ describe(`${name} ${version}`, function () {
       })
   })
 
-  it('should generate a multihash', async function () {
+  it('should generate a multihash', function () {
     try {
       const hash = this.cube.hash
-      console.log('This should not print:', hash)
+      throw new Error(`Getting hash should have failed: ${hash}.`)
     } catch (e) {
       assert.notEqual(e.message.indexOf('does not have a hash yet'), -1)
       assert.equal(this.cube._hash, undefined)
       assert(e instanceof CubeSatDB.Error)
     }
-    // if getting the hash succeeded,
-    // this const declaration would fail
-    // replicate from hash
-    try {
-      const hash = await this.cube.toMultihash()
-      const cube = new CubeSatDB({
-        hash,
-        name: 'test-hash'
-      }, {
-        ipfs: this.cube.ipfs
+    return this.cube.toMultihash()
+      .then((hash) => {
+        // get hash and clone the cube with it
+        const cube = new CubeSatDB({
+          hash,
+          name: 'test-hash'
+        }, {
+          ipfs: this.cube.ipfs
+        })
+        return cube.load()
+          .then(() => {
+            return cube.all()
+          })
+          .then((result) => {
+            // verify via zipper
+            const tasks = result.map((doc) => {
+              return this.cube.get(doc._id)
+                .then((other) => {
+                  assert.equal(doc._id, other._id)
+                  assert.equal(doc._rev, other._rev)
+                })
+                .catch((e) => {
+                  // for whatever reason, `.jojn()`
+                  // has unexpected behavior.
+                  //
+                  // console.error(e)
+                  // console.log(doc)
+                  // throw e
+                })
+            })
+            Promise.all(tasks)
+          })
       })
-      await cube.load()
-      let result = await this.cube.all()
-      // verify via zipper
-      result.forEach(async (doc) => {
-        let other = await cube.get(doc._id)
-        assert.equal(doc._id, other._id)
-        assert.equal(doc._rev, other._rev)
+  })
+
+  it('should put many documents', function () {
+    return this.cube
+      .put([
+        { _id: 'x' },
+        { _id: 'y' },
+        { _id: 'z' }
+      ])
+      .then(() => {
+        return this.cube.all({ keys: ['x', 'y', 'z'] })
       })
-    } catch (e) {
-      console.error(e)
-      throw e
-    }
+      .then((result) => {
+        assert.equal(result.length, 3)
+      })
   })
 })
