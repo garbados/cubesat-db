@@ -6,8 +6,6 @@ const IpfsLog = require('ipfs-log')
 const PouchDB = require('pouchdb')
 PouchDB.plugin(require('pouchdb-find'))
 
-const HASH = /[\w\d]{46}/
-
 class CubeError extends Error {}
 
 /**
@@ -56,13 +54,23 @@ class CubeSatDB {
     }
     this._log = new this._options.IpfsLog(this.ipfs, this.name)
     this._pouch = new this._options.PouchDB(this.name, this._options.pouch)
-    // TODO use interpret name as hash?
   }
 
-  async load () {
-    if (!HASH.test(this.name)) return null
-    let log = await this._options.IpfsLog.fromMultihash(this.ipfs, this.name)
-    return this.join(log)
+  /**
+   * Loads the oplog from the store's IPFS hash.
+   *
+   * Errors out if the store wasnt constructed with a hash
+   * or hasn't established one yet using `.toMultihash()`.
+   *
+   *  @return {Promise} A promise that resolves once the store has loaded.
+   */
+  load () {
+    let hash = this.hash
+    return this._options.IpfsLog
+      .fromMultihash(this.ipfs, hash)
+      .then((log) => {
+        return this.join(log)
+      })
   }
 
   /**
@@ -84,22 +92,17 @@ class CubeSatDB {
    * Merges another CubeSatDB or IpfsLog into this one.
    * @param  {IpfsLog|CubeSatDB} log An instance of IpfsLog or CubeSatDB.
    */
-  async join (log) {
+  join (log) {
     if (log.log) log = log.log
-    await this.log.join(log)
-    // apply this.log.values to this.pouch to catch up
-    for (let i = 0; i < this.log.length; i++) {
-      let entry = this.log.values[i]
-      try {
+    return this.log.join(log).then(() => {
+      // apply this.log.values to this.pouch to catch up
+      return this.log.values.forEach(async (entry) => {
         await this.pouch.bulkDocs({
           docs: [entry.payload],
           new_edits: false
         })
-      } catch (e) {
-        console.error(e)
-        throw e
-      }
-    }
+      })
+    })
   }
 
   /**
@@ -107,16 +110,18 @@ class CubeSatDB {
    * @param  {[type]} doc [description]
    * @return {[type]}     [description]
    */
-  async put (doc) {
+  put (doc) {
     if (doc instanceof Array) {
-      return doc.map((doc) => {
+      const tasks = doc.map((doc) => {
         return this.put(doc)
       })
+      return Promise.all(tasks)
     }
     this.validate(doc)
-    let result = await this.pouch.put(doc)
-    doc._rev = result.rev
-    return this.log.append(doc)
+    return this.pouch.put(doc).then((result) => {
+      doc._rev = result.rev
+      return this.log.append(doc)
+    })
   }
 
   /**
@@ -124,36 +129,37 @@ class CubeSatDB {
    * @param  {[type]} doc [description]
    * @return {[type]}     [description]
    */
-  async post (doc) {
+  post (doc) {
     if (doc instanceof Array) {
-      return doc.map((doc) => {
+      const tasks = doc.map((doc) => {
         return this.post(doc)
       })
+      return Promise.all(tasks)
     }
     this.validate(doc)
     // post doc
-    let result = await this.pouch.post(doc)
-    // apply new properties
-    doc._id = result.id
-    doc._rev = result.rev
-    // apply doc to log
-    return this.log.append(doc)
+    return this.pouch.post(doc).then((result) => {
+      // apply new properties
+      doc._id = result.id
+      doc._rev = result.rev
+      // apply doc to log
+      return this.log.append(doc)
+    })
   }
 
   /**
    * [get description]
    * @return {[type]} [description]
    */
-  async get () {
-    let result = await this.pouch.get.apply(this.pouch, arguments)
-    return result
+  get () {
+    return this.pouch.get.apply(this.pouch, arguments)
   }
 
   /**
    * [all description]
    * @return {[type]} [description]
    */
-  async all (options = {}) {
+  all (options = {}) {
     // default to including docs
     options.include_docs = options.include_docs || true
     return this.pouch.allDocs(options).then(function (result) {
@@ -174,16 +180,17 @@ class CubeSatDB {
    * @param  {String} doc._rev [description]
    * @param  {Object} options  [description]
    */
-  async del ({ _id, _rev }, options = {}) {
+  del ({ _id, _rev }, options = {}) {
     assert(_id, 'doc requires an _id to delete it.')
     assert(_rev, 'doc requires a _rev to delete it.')
     // remove from local
-    let result = await this.pouch.remove(_id, _rev, options)
-    // add DEL op to log
-    return this.log.append({
-      _id,
-      _rev: result.rev,
-      _deleted: true
+    return this.pouch.remove(_id, _rev, options).then((result) => {
+      // add op to log
+      return this.log.append({
+        _id,
+        _rev: result.rev,
+        _deleted: true
+      })
     })
   }
 
@@ -191,23 +198,26 @@ class CubeSatDB {
    * [find description]
    * @return {[type]} [description]
    */
-  async find () {
-    let result = await this.pouch.find.apply(this.pouch, arguments)
-    return result.docs
+  find () {
+    return this.pouch.find.apply(this.pouch, arguments).then((result) => {
+      return result.docs
+    })
   }
 
   /**
    * [query description]
    * @return {[type]} [description]
    */
-  async query () {
-    let result = await this.pouch.query.apply(this.pouch, arguments)
-    return result
+  query () {
+    return this.pouch.query.apply(this.pouch, arguments)
   }
 
-  async toMultihash () {
-    this._hash = await this.log.toMultihash()
-    return this.hash
+  /**
+   * [toMultihash description]
+   * @return {Promise} [description]
+   */
+  toMultihash () {
+    return this.log.toMultihash()
   }
 
   get hash () {
