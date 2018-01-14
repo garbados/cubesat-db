@@ -47,8 +47,6 @@ TODO usage examples
 #### Table of Contents
 
 -   [CubeSatDB](#cubesatdb)
-    -   [validate](#validate)
-    -   [join](#join)
     -   [put](#put)
     -   [post](#post)
     -   [get](#get)
@@ -56,6 +54,12 @@ TODO usage examples
     -   [del](#del)
     -   [find](#find)
     -   [query](#query)
+    -   [join](#join)
+    -   [load](#load)
+    -   [validate](#validate)
+    -   [toMultihash](#tomultihash)
+    -   [hash](#hash)
+    -   [name](#name)
     -   [pouch](#pouch)
     -   [log](#log)
     -   [ipfs](#ipfs)
@@ -73,10 +77,100 @@ TODO usage examples
     -   `options._IPFS` **IPFS** [description]
     -   `options._PouchDB` **PouchDB** [description]
 
+#### put
+
+Add or update a document.
+
+If you pass an array of docs,
+it will pass each of them to this method
+and resolve once they all resolve.
+
+**Parameters**
+
+-   `doc` **([Object](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object) \| [Array](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Array))** The document to save, or an array of such documents.
+    -   `doc._id` **[String](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String)** The document's ID. Required for `.put()`
+
+Returns **[Promise](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Promise)** 
+
+#### post
+
+Post a document to the store, creating an ID for it.
+To add a document with an ID, see `.put()`.
+
+If you pass an array of docs,
+it will pass each of them to this method
+and resolve once they all resolve.
+
+**Parameters**
+
+-   `doc` **([Object](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object) \| [Array](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Array))** The document to save, or an array of such documents.
+
+Returns **[Promise](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Promise)** 
+
+#### get
+
+Retrieve a document. Wrapper around [PouchDB#get()](https://pouchdb.com/api.html#fetch_document)
+
+Returns **[Promise](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Promise)&lt;[Object](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object)>** A promise that resolves to the specified document.
+
+#### all
+
+Retrieve all documents. Wrapper around [PouchDB#allDocs](https://pouchdb.com/api.html#batch_fetch)
+
+**Parameters**
+
+-   `options` **[Object](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object)**  (optional, default `{}`)
+
+Returns **[Promise](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Promise)&lt;[Array](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Array)&lt;[Object](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object)>>** Resolves to an array of retrieved documents.
+
+#### del
+
+Delete a document using its ID and revision value.
+
+**Parameters**
+
+-   `doc` **[Object](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object)** The document to delete.
+    -   `doc._id` **[String](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String)** The document's ID. Required.
+    -   `doc._rev` **[String](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String)** The document's revision value. Required.
+
+Returns **[Promise](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Promise)** 
+
+#### find
+
+Wrapper around [PouchDB#find](https://pouchdb.com/api.html#query_index) that returns each selected document.
+
+Returns **[Promise](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Promise)&lt;[Array](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Array)&lt;[Object](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object)>>** Selected documents.
+
+#### query
+
+Alias to [PouchDB#query()](https://pouchdb.com/api.html#query_database).
+
+Returns **[Promise](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Promise)&lt;[Object](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object)>** Query result.
+
+#### join
+
+Merges another CubeSatDB or IpfsLog into this one.
+
+**Parameters**
+
+-   `log` **(IpfsLog | [CubeSatDB](#cubesatdb))** An instance of IpfsLog or CubeSatDB.
+
+Returns **[Promise](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Promise)** [description]
+
+#### load
+
+Loads the oplog from the store's IPFS hash.
+
+Errors out if the store wasnt constructed with a hash
+or hasn't established one yet using `.toMultihash()`.
+
+Returns **[Promise](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Promise)** A promise that resolves once the store has loaded.
+
 #### validate
 
 A document validator. It makes sure a document is
 an object but not an array.
+
 Subclasses can extend this method to enforce a schema.
 
 **Parameters**
@@ -86,90 +180,31 @@ Subclasses can extend this method to enforce a schema.
 
 -   Throws **CubeError** An error about the document.
 
-#### join
+#### toMultihash
 
-Merges another CubeSat or IpfsLog into this one.
+Returns **[Promise](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Promise)&lt;[String](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String)>** The multihash for this store. Use this value to clone the store.
 
-**Parameters**
+#### hash
 
--   `log` **(IpfsLog | [CubeSatDB](#cubesatdb))** An instance of IpfsLog or CubeSat.
+-   Throws **CubeError** If `CubeSatDB#toMultihash()` has not been called yet.
 
-#### put
+Returns **[String](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String)** The multihash for the store.
 
-[put description]
+#### name
 
-**Parameters**
-
--   `doc` **\[type]** [description]
-
-Returns **\[type]** [description]
-
-#### post
-
-[post description]
-
-**Parameters**
-
--   `doc` **\[type]** [description]
-
-Returns **\[type]** [description]
-
-#### get
-
-[get description]
-
-Returns **\[type]** [description]
-
-#### all
-
-[all description]
-
-**Parameters**
-
--   `options`   (optional, default `{}`)
-
-Returns **\[type]** [description]
-
-#### del
-
-[del description]
-
-**Parameters**
-
--   `$0` **[Object](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object)** 
-    -   `$0._id`  
-    -   `$0._rev`  
--   `options` **[Object](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object)** [description] (optional, default `{}`)
-
-#### find
-
-[find description]
-
-Returns **\[type]** [description]
-
-#### query
-
-[query description]
-
-Returns **\[type]** [description]
+Returns **[String](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String)** The name of this database.
 
 #### pouch
 
-[pouch description]
-
-Returns **PouchDB** The CubeSat instance's instance of PouchDB.
+Returns **PouchDB** The CubeSatDB instance's instance of PouchDB.
 
 #### log
 
-[log description]
-
-Returns **IpfsLog** The CubeSat instance's instance of IpfsLog.
+Returns **IpfsLog** The CubeSatDB instance's instance of IpfsLog.
 
 #### ipfs
 
-[ipfs description]
-
-Returns **IPFS** The CubeSat instance's instance of an IPFS node.
+Returns **IPFS** The CubeSatDB instance's instance of an IPFS node.
 
 #### Error
 
