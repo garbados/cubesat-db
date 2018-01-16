@@ -1,11 +1,9 @@
 # cubesat-db
 
+[![npm version](https://img.shields.io/npm/v/cubesat-db.svg?style=flat-square)](https://www.npmjs.com/package/cubesat-db)
 [![stability](https://img.shields.io/badge/stability-experimental-orange.svg?style=flat-square)](https://nodejs.org/api/documentation.html#documentation_stability_index)
 [![js-standard-style](https://img.shields.io/badge/code%20style-standard-brightgreen.svg?style=flat-square)](https://github.com/feross/standard)
-
-<!-- [![npm version](https://img.shields.io/npm/v/@garbados/cubesat-db.svg?style=flat-square)](https://www.npmjs.com/package/cubesat-db) -->
-
-<!-- [![build status](https://img.shields.io/travis/garbados/cubesat-db/master.svg?style=flat-square)](https://travis-ci.org/garbados/cubesat-db) -->
+[![build status](https://img.shields.io/travis/garbados/cubesat-db/master.svg?style=flat-square)](https://travis-ci.org/garbados/cubesat-db)
 
 <!-- [![test coverage](https://img.shields.io/coveralls/github/garbados/cubesat-db/master.svg?style=flat-square)](https://coveralls.io/github/garbados/cubesat-db) -->
 
