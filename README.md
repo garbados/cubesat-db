@@ -21,13 +21,6 @@ A small connector for big things.
 
 CubeSatDB uses [PouchDB][pouchdb] and the [ipfs-log][ipfs-log] module from [OrbitDB][orbitdb] to store, index, and replicate documents between peers over IPFS _and_ CouchDB.
 
-Feature Goals:
-
--   [x] Use PouchDB to provide Mango and Map/Reduce indexers over an append-only log.
--   [x] Join CubeSatDBs together, merging their histories.
--   [ ] Import a remote CouchDB database into IPFS blocks via replication.
--   [ ] Start a CubeSatDB with a multihash to sync with a remote log, or merge individual sets of rows via multihashes.
-
 ## Install
 
 Install CubeSatDB using [npm](http://npmjs.com/):
@@ -38,7 +31,69 @@ $ npm install -S cubesat-db
 
 ## Usage
 
-TODO usage examples
+CubeSatDB is just a database: you can add, update, remove, and query records:
+
+```javascript
+const CubeSatDB = require('cubesat-db')
+
+let cube = new CubeSatDB('hello-world')
+
+cube.all().then(function (result) {
+    // Print all of the documents in the db
+    console.log(result)
+    // Add a document to the database
+    return cube.post({ status: 'ok', date: Date.now() })
+}).then(function () {
+    // Add a document with a known ID
+    return cube.put({ _id: 'mars-rover', status: 'landing' })
+}).then(function (result) {
+    // extract the updated document from the response
+    let doc = result.payload
+    // Remove a document
+    return cube.del(doc)
+})
+```
+
+But you can also replicate it between computers:
+
+```javascript
+// on one computer:
+let cube = new CubeSatDB('hello-world')
+/*
+... add documents ...
+then get the cube's multihash
+ */
+cube.toMultihash().then(function (hash) {
+    // pass this value to your friend
+    console.log(hash)
+})
+
+// on another computer
+const hash = '...' // that value from above
+let cube = new CubeSatDB({ hash, name: 'hello-world' })
+cube.load().then(function () {
+    console.log('Cube up to date!')
+})
+```
+
+And you can join one CubeSatDB instances with another. It will merge all the entries from the other that it does not already have:
+
+```javascript
+let cube1 = new CubeSatDB('cube-1')
+let cube2 = new CubeSatDB('cube-2', { ipfs: cube1.ipfs })
+Promise.all([
+    cube1.post.bind(cube1, { status: 'ok' })
+    cube2.post.bind(cube2, { status: 'fine' })
+]).then(function () {
+    return cube1.join(cube2)
+}).then(function () {
+    // cube1 has all the values in cube2
+    // but cube2 doesn't have cube1's records
+    console.log(cube1.log.values)
+    })
+```
+
+If you have any questions, please [leave an issue!](https://github.com/garbados/cubesat-db/issues)
 
 ## API
 
@@ -225,7 +280,7 @@ npm test
 
 ## Contributions
 
-TODO
+All contributions are welcome: bug reports, feature requests, "why doesn't this work" questions, patches for fixes and features, etc. For all of the above, [file an issue](https://github.com/garbados/cubesat-db/issues) or [submit a pull request](https://github.com/garbados/cubesat-db/pulls).
 
 ## License
 
