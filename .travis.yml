@@ -4,4 +4,4 @@ node_js:
 - 6
 after_success:
 - npm i coveralls
-- npx nyc report --reporter=text-lcov | coveralls
+- npm run coveralls
