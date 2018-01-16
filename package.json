@@ -20,7 +20,8 @@
   "scripts": {
     "test": "standard && dependency-check . --unused --no-dev && mocha -R spec test.js",
     "cov": "nyc npm test",
-    "docs": "documentation readme --section=\"API\""
+    "docs": "documentation readme --section=\"API\"",
+    "coveralls": "nyc report --reporter=text-lcov | coveralls"
   },
   "repository": {
     "type": "git",
