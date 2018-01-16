@@ -5,9 +5,13 @@ const CubeSatDB = require('.')
 const rimraf = require('rimraf')
 const {name, version} = require('./package.json')
 
-before(async function () {
+function clean () {
   rimraf.sync('test')
   rimraf.sync('test-*')
+}
+
+before(async function () {
+  clean()
   this.cube = new CubeSatDB('test')
   await new Promise((resolve, reject) => {
     this.cube.ipfs.on('error', reject)
@@ -19,8 +23,7 @@ after(async function () {
   await new Promise((resolve) => {
     this.cube.ipfs.stop(resolve)
   })
-  rimraf.sync('test')
-  rimraf.sync('test-*')
+  clean()
   // IPFS doesn't close nicely so
   // we have to do things the angry way
   process.exit(0)
@@ -199,6 +202,19 @@ describe(`${name} ${version}`, function () {
       })
       .then((result) => {
         assert.equal(result.length, 3)
+      })
+  })
+
+  it('should pass options through #all', function () {
+    return this.cube.all({ include_docs: false })
+      .then((rows) => {
+        rows.forEach((row) => {
+          assert.equal(typeof row.id, 'string')
+          assert.equal(typeof row.value, 'object')
+          assert.equal(typeof row.key, 'string')
+          assert.equal(row.rev, undefined)
+          assert.equal(row.doc, undefined)
+        })
       })
   })
 })

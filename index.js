@@ -126,7 +126,7 @@ class CubeSatDB {
    */
   all (options = {}) {
     // default to including docs
-    options.include_docs = options.include_docs || true
+    if (options.include_docs === undefined) options.include_docs = true
     return this.pouch.allDocs(options).then(function (result) {
       if (options.include_docs) {
         // format output to resemble find()
@@ -192,9 +192,6 @@ class CubeSatDB {
         return this.pouch.bulkDocs({
           docs: [entry.payload],
           new_edits: false
-        })
-        .catch((e) => {
-          console.log(e)
         })
       })
       return Promise.all(tasks)
