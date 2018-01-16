@@ -1,7 +1,6 @@
 language: node_js
 node_js:
 - 8
-- 6
 after_success:
 - npm i coveralls
 - nyc npm test && nyc report --reporter=text-lcov | coveralls
